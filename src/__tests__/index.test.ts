@@ -131,12 +131,9 @@ describe('@normful/parallel-web-pi-extension', () => {
       expect.objectContaining({
         name: 'web_search',
         label: 'Web Search',
-        description: expect.stringContaining("Parallel's Search API"),
-        promptSnippet: expect.stringContaining("Parallel's Search API"),
-        promptGuidelines: [
-          'Use web_search for source discovery and raw excerpts when you need to investigate sources yourself.',
-          'Provide 2-3 concise keyword search queries when possible; search_queries is required.',
-        ],
+        description: expect.stringContaining('Search the web for current'),
+        promptSnippet: 'Sources and excerpts',
+        promptGuidelines: [],
         execute: expect.any(Function),
       })
     );
@@ -146,15 +143,44 @@ describe('@normful/parallel-web-pi-extension', () => {
       expect.objectContaining({
         name: 'web_fetch',
         label: 'Web Fetch',
-        description: expect.stringContaining("Parallel's Extract API"),
-        promptSnippet: expect.stringContaining("Parallel's Extract API"),
-        promptGuidelines: [
-          'Use web_fetch when the user provides one or more URLs and wants the page content or a clean extraction.',
-          'Batch multiple URLs into one web_fetch call instead of parallelizing many single-URL calls.',
-        ],
+        description: expect.stringContaining('Read URLs as clean text'),
+        promptSnippet: 'Page text from URLs',
+        promptGuidelines: ['Batch multiple URLs into one call.'],
         execute: expect.any(Function),
       })
     );
+  });
+
+  it('describes the tools generically, without naming the provider', async () => {
+    const extension = (await import('../index.js')).default;
+    const pi = createMockPi();
+    extension(pi as unknown as ExtensionAPI);
+
+    const modelFacingText = pi.registerTool.mock.calls.flatMap(([tool]) => [
+      tool.description,
+      tool.promptSnippet,
+      ...(tool.promptGuidelines ?? []),
+      ...Object.values(tool.parameters?.properties ?? {}).flatMap((schema) => {
+        const anySchema = schema as { description?: string; items?: unknown };
+        const items = anySchema.items as { description?: string } | undefined;
+        return [anySchema.description, items?.description];
+      }),
+    ]);
+
+    // The routing block is system-prompt text too, so it is held to the rule.
+    const handler = getEventHandler(pi, 'before_agent_start');
+    const injected = await handler({
+      systemPrompt: 'Base prompt',
+      systemPromptOptions: {
+        selectedTools: ['web_research', 'web_search', 'web_fetch'],
+      },
+    });
+    modelFacingText.push(injected.systemPrompt);
+
+    expect(modelFacingText.length).toBeGreaterThan(0);
+    for (const text of modelFacingText) {
+      expect(text ?? '').not.toMatch(/parallel/i);
+    }
   });
 
   it('should append web grounding guidance to the system prompt when web tools are active', async () => {
@@ -190,13 +216,11 @@ describe('@normful/parallel-web-pi-extension', () => {
         selectedTools: ['web_research', 'web_search', 'web_fetch'],
       },
     });
+    expect(all.systemPrompt).toContain('Use web_research when no single page');
+    expect(all.systemPrompt).toContain('Use web_search first');
+    expect(all.systemPrompt).toContain('Use web_fetch to read a specific page');
     expect(all.systemPrompt).toContain(
-      'Use web_research for a complete answer'
-    );
-    expect(all.systemPrompt).toContain('Use web_search for source discovery');
-    expect(all.systemPrompt).toContain('Use web_fetch to read a known URL');
-    expect(all.systemPrompt).toContain(
-      'source URLs as clickable Markdown links'
+      'clickable Markdown links to the returned source URLs'
     );
     const researchOnly = await handler({
       systemPrompt: 'Base prompt',
@@ -608,7 +632,10 @@ describe('@normful/parallel-web-pi-extension', () => {
       type: 'string',
       maxLength: 512,
     });
-    expect(tool.promptGuidelines.join(' ')).toContain('previous_response_id');
+    // Continuation must be discoverable from the parameter the model sets.
+    expect(
+      tool.parameters.properties.previous_response_id.description
+    ).toContain('earlier web_research call');
     const args = tool.prepareArguments({
       query: 'A focused follow-up',
       previous_response_id: 'resp_prior',

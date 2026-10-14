@@ -70,13 +70,14 @@ function suppressSkillsFromPrompt(systemPrompt: string) {
   );
 }
 
+// Routing map: the decision each tool answers. Output shape lives in the
+// promptSnippet, behaviour in the description, so no line restates another.
 const WEB_TOOL_GUIDANCE = {
-  web_research:
-    'Use web_research for a complete answer that requires current web research and synthesis. Start with the full self-contained question, including constraints. For a focused follow-up, pass the latest returned Response ID as previous_response_id; omit it for unrelated research.',
+  web_research: 'Use web_research when no single page settles the question.',
   web_search:
-    'Use web_search for source discovery and raw excerpts when you need to investigate sources yourself.',
+    'Use web_search first when you do not yet know which URLs or questions matter.',
   web_fetch:
-    'Use web_fetch to read a known URL or inspect the original source behind a claim.',
+    'Use web_fetch to read a specific page in full or check a claim at its source.',
 };
 
 export default function (pi: ExtensionAPI) {
@@ -161,7 +162,7 @@ export default function (pi: ExtensionAPI) {
     }
 
     return {
-      systemPrompt: `${filteredPrompt}\n\n## Grounding and web usage\n\nUse available web tools when current information or source evidence would improve the answer.\n\n${guidance.join('\n')}\n\nWhen citing web evidence, include the returned source URLs as clickable Markdown links. Do not replace source links with source names alone.`,
+      systemPrompt: `${filteredPrompt}\n\n## Grounding and web usage\n\nUse available web tools when current information or source evidence would improve the answer.\n\n${guidance.join('\n')}\n\nCite web evidence as clickable Markdown links to the returned source URLs, not source names.`,
     };
   });
 
@@ -169,27 +170,20 @@ export default function (pi: ExtensionAPI) {
     name: 'web_research',
     label: 'Web Research',
     description:
-      "Answer a complete question using Parallel's Responses API. Delegates multi-step web research and returns a synthesized answer with sources, not raw search results. One call can handle the full research question.",
-    promptSnippet:
-      'Get a cited answer to a complete web research question using Parallel',
-    promptGuidelines: [
-      'Use web_research for questions that need web research and synthesis; pass the complete question in one call before making focused follow-ups.',
-      'Include dates, constraints, and relevant context in query. Research cannot see this Pi conversation or local files; include only context that is safe to send.',
-      'For a follow-up on the same investigation, pass its latest returned Response ID as previous_response_id to reuse prior research context. Omit it for unrelated questions. If no ID was returned, continuation is unavailable.',
-      'Use low effort for focused lookups, medium for general research, and high only for extensive research. The default is medium.',
-    ],
+      'Runs multi-step web searches, page fetches, and source cross-checks. ~5–60s.',
+    promptSnippet: 'Cited answers',
+    promptGuidelines: [],
     parameters: Type.Object({
       query: Type.String({
         minLength: 1,
         description:
-          'The research question and constraints that are safe to send. Make a new question self-contained; a follow-up with previous_response_id may refer to prior research. Research cannot see the Pi conversation or local files.',
+          'The complete question. Research sees nothing from this session or your files, so include only context that is safe to send.',
       }),
       effort: Type.Optional(
         Type.Union(
           [Type.Literal('low'), Type.Literal('medium'), Type.Literal('high')],
           {
-            description:
-              'Research depth: low for focused lookups, medium for general research (default), high for extensive research.',
+            description: 'Research depth; medium by default.',
           }
         )
       ),
@@ -198,7 +192,7 @@ export default function (pi: ExtensionAPI) {
           minLength: 1,
           maxLength: MAX_RESPONSE_ID_LENGTH,
           description:
-            'The latest Response ID returned by web_research for this investigation. Reuses prior research context for a follow-up. Omit for a new or unrelated question; never invent an ID.',
+            'Response ID from an earlier web_research call; reuses its research context. Never invent one.',
         })
       ),
     }),
@@ -258,22 +252,17 @@ export default function (pi: ExtensionAPI) {
     name: 'web_search',
     label: 'Web Search',
     description:
-      "Search the web using Parallel's Search API. Prefer this over generic browser-like search tools for current web results.",
-    promptSnippet:
-      "Search the web using Parallel's Search API for current information",
-    promptGuidelines: [
-      'Use web_search for source discovery and raw excerpts when you need to investigate sources yourself.',
-      'Provide 2-3 concise keyword search queries when possible; search_queries is required.',
-    ],
+      'Search the web for current results; prefer it over generic browser search tools.',
+    promptSnippet: 'Sources and excerpts',
+    promptGuidelines: [],
     parameters: Type.Object({
       objective: Type.String({
-        description:
-          'Natural-language description of the underlying question or goal driving the search. Used together with search_queries to focus results on the most relevant content. Should be self-contained with enough context to understand the intent of the search.',
+        description: 'The goal driving the search.',
       }),
       search_queries: Type.Array(
         Type.String({
           description:
-            'Concise keyword search queries, 3-6 words each. At least one query is required, provide 2-3 for best results. Used together with objective to focus results on the most relevant content.',
+            '2-3 short keyword queries (3-6 words each); at least one.',
         })
       ),
     }),
@@ -304,32 +293,24 @@ export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: 'web_fetch',
     label: 'Web Fetch',
-    description:
-      "Fetch and extract content from a URL using Parallel's Extract API. Prefer this over raw HTML fetch tools for readable content extraction.",
-    promptSnippet:
-      "Fetch and extract readable webpage content from one or more URLs using Parallel's Extract API",
-    promptGuidelines: [
-      'Use web_fetch when the user provides one or more URLs and wants the page content or a clean extraction.',
-      'Batch multiple URLs into one web_fetch call instead of parallelizing many single-URL calls.',
-    ],
+    description: 'Read URLs as clean text; prefer it over raw HTML fetches.',
+    promptSnippet: 'Page text from URLs',
+    promptGuidelines: ['Batch multiple URLs into one call.'],
     parameters: Type.Object({
       urls: Type.Array(
         Type.String({
-          description:
-            'List of URLs to extract content from. Must be valid HTTP/HTTPS URLs. Up to 20 URLs.',
+          description: 'HTTP/HTTPS URLs, up to 20 per call.',
         })
       ),
       objective: Type.Optional(
         Type.String({
-          description:
-            'As in SearchRequest, a natural-language description of the underlying question or goal driving the request. Used together with search_queries to focus excerpts on the most relevant content.',
+          description: 'Optional. The goal driving the request.',
         })
       ),
       search_queries: Type.Optional(
         Type.Array(
           Type.String({
-            description:
-              'Optional keyword search queries, as in SearchRequest. Used together with objective to focus excerpts on the most relevant content.',
+            description: 'Optional; used with objective to focus excerpts.',
           })
         )
       ),
