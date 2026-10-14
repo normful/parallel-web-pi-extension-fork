@@ -119,11 +119,9 @@ in the complete report.
 
 ## Dogfooding Locally
 
-Build the extension first:
-
-```bash
-npm run build
-```
+Pi transpiles TypeScript extensions with jiti, so it loads `src/index.ts`
+directly and local testing needs no build step. `npm run build` exists only to
+produce `dist/` for publishing.
 
 ### Option 1: Load It Directly With `pi -e`
 
@@ -132,7 +130,7 @@ This is the fastest way to test a local checkout.
 From the repo root:
 
 ```bash
-pi --no-extensions --no-skills -e ./dist/index.js
+pi --no-extensions --no-skills -e ./src/index.ts
 ```
 
 If the extension loads successfully, Pi will have:
@@ -147,12 +145,6 @@ If the extension loads successfully, Pi will have:
 ### Option 2: Symlink It Into Pi Extensions
 
 This is better if you want Pi to auto-discover it and support `/reload`.
-
-First build it:
-
-```bash
-npm run build
-```
 
 Then symlink the package directory into Pi's global extensions folder:
 
@@ -169,11 +161,7 @@ Then start Pi normally:
 pi
 ```
 
-After code changes, rebuild and run `/reload` inside Pi:
-
-```bash
-npm run build
-```
+After code changes, run `/reload` inside Pi.
 
 ## Local Auth Testing
 
@@ -193,7 +181,7 @@ and run `/logout` and select Parallel to remove the stored credential.
 
 ```bash
 export PARALLEL_API_KEY=your_key_here
-pi --no-extensions --no-skills -e ./dist/index.js
+pi --no-extensions --no-skills -e ./src/index.ts
 ```
 
 Note: stored Pi auth is preferred over `PARALLEL_API_KEY` if both exist.
@@ -204,7 +192,7 @@ For local or staging OAuth testing, set `PARALLEL_PLATFORM_URL` before starting 
 
 ```bash
 export PARALLEL_PLATFORM_URL=https://your-platform-host
-pi --no-extensions --no-skills -e ./dist/index.js
+pi --no-extensions --no-skills -e ./src/index.ts
 ```
 
 This changes the browser login endpoints used by `/login parallel`.

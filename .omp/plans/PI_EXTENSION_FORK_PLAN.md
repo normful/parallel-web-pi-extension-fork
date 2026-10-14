@@ -252,3 +252,9 @@ Node v26.7.0, npm 10.9.8, source commit `3a4296260ef785055e16915ac7b76de744da025
   the plan's checks all stop at `import('./dist/index.js')`.
 - Added after the plan was written: `prepare` and `prepublishOnly` both run
   `npm run build`, so a publish cannot ship a `files` list whose `dist/` is absent.
+- Follow-up after the port: `pi.extensions` moved to `./src/index.ts`, and both
+  header sites now read the version from `package.json` at runtime
+  (`import pkg from '../package.json' with { type: 'json' }`), so the tsup and
+  vitest `define` for `__PACKAGE_VERSION__` is gone. Pi's loader transpiles TS
+  with jiti, so src loads with no build; `npm run build` still emits `dist/` for
+  publishing and `files` gained `src`.

@@ -1,4 +1,4 @@
-declare const __PACKAGE_VERSION__: string;
+import pkg from '../package.json' with { type: 'json' };
 
 export const PARALLEL_RESPONSES_URL = 'https://api.parallel.ai/v1/responses';
 export const PARALLEL_RESPONSES_MAX_INPUT_CHARS = 20_000;
@@ -222,7 +222,7 @@ export async function runParallelResearch(
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        'X-Tool-Calling-Package': `npm:@normful/parallel-web-pi-extension/v${__PACKAGE_VERSION__ ?? '0.0.0'}`,
+        'X-Tool-Calling-Package': `npm:@normful/parallel-web-pi-extension/v${pkg.version}`,
       },
       body: JSON.stringify({
         model: 'parallel',

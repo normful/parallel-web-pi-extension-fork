@@ -8,11 +8,13 @@
   "pi": {
     "image": "https://assets.parallel.ai/white-parallel-avatar-540.png",
     "extensions": [
-      "./dist/index.js"
+      "./src/index.ts"
     ]
   },
   "files": [
     "dist",
+    "src",
+    "!src/**/*.test.ts",
     "package.json",
     "README.md"
   ],

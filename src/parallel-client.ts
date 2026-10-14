@@ -1,6 +1,5 @@
-declare const __PACKAGE_VERSION__: string;
-
 import Parallel from 'parallel-web';
+import pkg from '../package.json' with { type: 'json' };
 
 export interface ParallelSearchInput {
   objective: string;
@@ -21,7 +20,7 @@ function createParallelClient(apiKey: string) {
   return new Parallel({
     apiKey,
     defaultHeaders: {
-      'X-Tool-Calling-Package': `npm:@normful/parallel-web-pi-extension/v${__PACKAGE_VERSION__ ?? '0.0.0'}`,
+      'X-Tool-Calling-Package': `npm:@normful/parallel-web-pi-extension/v${pkg.version}`,
     },
   });
 }

@@ -7,7 +7,8 @@ describe('Pi research package contract', () => {
       readFileSync(new URL('../../package.json', import.meta.url), 'utf8')
     );
     expect(manifest.name).toBe('@normful/parallel-web-pi-extension');
-    expect(manifest.pi.extensions).toEqual(['./dist/index.js']);
+    expect(manifest.pi.extensions).toEqual(['./src/index.ts']);
+    expect(manifest.files).toContain('src');
     expect(manifest.pi.subagents).toBeUndefined();
     expect(manifest.files).not.toContain('agents');
     expect(manifest.dependencies['pi-subagents']).toBeUndefined();
