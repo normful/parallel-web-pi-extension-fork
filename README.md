@@ -120,8 +120,7 @@ in the complete report.
 ## Dogfooding Locally
 
 Pi transpiles TypeScript extensions with jiti, so it loads `src/index.ts`
-directly and local testing needs no build step. `npm run build` exists only to
-produce `dist/` for publishing.
+directly. There is no build step: the package ships source.
 
 ### Option 1: Load It Directly With `pi -e`
 
@@ -214,7 +213,6 @@ Or ask Pi to call the tool explicitly.
 ## Dev Loop
 
 ```bash
-npm run build
 npm test
 npm run typecheck
 ```
