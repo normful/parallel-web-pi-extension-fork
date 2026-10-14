@@ -56,9 +56,9 @@ A holding version containing only `package.json` and `README.md`, with no `pi`
 entry and no extension source, so it registers no tools. It was replaced by
 1.0.0 about a minute later.
 
-<!-- No git tags exist for these versions yet, so the compare and tag links below
-     do not resolve. Create and push v1.0.0 (and v0.0.0-stage, if wanted) to
-     make them live. -->
+<!-- v0.0.0-stage has no git tag, so its link below does not resolve. The
+     Unreleased and 1.0.0 links are live: v1.0.0 is tagged at the commit whose
+     contents the npm 1.0.0 tarball matches byte for byte. -->
 
 [Unreleased]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/normful/parallel-web-pi-extension-fork/releases/tag/v1.0.0
