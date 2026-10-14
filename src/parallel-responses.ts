@@ -1,6 +1,28 @@
 import pkg from '../package.json' with { type: 'json' };
 
-export const PARALLEL_RESPONSES_URL = 'https://api.parallel.ai/v1/responses';
+/**
+ * Default API origin used when PARALLEL_BASE_URL is unset. Matches the value
+ * hardcoded into the parallel-web SDK, so a single variable can point every
+ * web tool at the same host.
+ */
+export const PARALLEL_API_ORIGIN = 'https://api.parallel.ai';
+export const PARALLEL_RESPONSES_PATH = '/v1/responses';
+/** Responses endpoint on the default origin. */
+export const PARALLEL_RESPONSES_URL = `${PARALLEL_API_ORIGIN}${PARALLEL_RESPONSES_PATH}`;
+
+/**
+ * Resolve the Responses endpoint, honoring PARALLEL_BASE_URL exactly as the
+ * parallel-web SDK does for web_search and web_fetch. The value is an origin:
+ * the `/v1/...` path is always appended, and a trailing slash is tolerated.
+ */
+export function resolveParallelResponsesUrl(
+  baseUrl: string | undefined = process.env.PARALLEL_BASE_URL
+) {
+  const origin = baseUrl?.trim().replace(/\/+$/, '');
+  return origin
+    ? `${origin}${PARALLEL_RESPONSES_PATH}`
+    : PARALLEL_RESPONSES_URL;
+}
 export const PARALLEL_RESPONSES_MAX_INPUT_CHARS = 20_000;
 export const PARALLEL_RESPONSES_TIMEOUT_MS = 120_000;
 export const DEFAULT_RESEARCH_EFFORT = 'medium';
@@ -217,7 +239,7 @@ export async function runParallelResearch(
   timeout.unref?.();
   try {
     requestSignal.throwIfAborted();
-    const response = await fetch(PARALLEL_RESPONSES_URL, {
+    const response = await fetch(resolveParallelResponsesUrl(), {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${apiKey}`,

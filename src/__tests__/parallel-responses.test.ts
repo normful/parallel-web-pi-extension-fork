@@ -4,6 +4,7 @@ import {
   PARALLEL_RESPONSES_MAX_INPUT_CHARS,
   PARALLEL_RESPONSES_TIMEOUT_MS,
   PARALLEL_RESPONSES_URL,
+  resolveParallelResponsesUrl,
   runParallelResearch,
   type ResearchInput,
 } from '../parallel-responses.js';
@@ -49,6 +50,43 @@ function mockResponse(payload: unknown = completed(), status = 200) {
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
+  delete process.env.PARALLEL_BASE_URL;
+});
+
+describe('PARALLEL_BASE_URL override', () => {
+  it('defaults to the public API origin when unset', () => {
+    delete process.env.PARALLEL_BASE_URL;
+    expect(resolveParallelResponsesUrl()).toBe(PARALLEL_RESPONSES_URL);
+    expect(PARALLEL_RESPONSES_URL).toBe('https://api.parallel.ai/v1/responses');
+  });
+
+  it.each([
+    ['https://staging.parallel.test', 'https://staging.parallel.test'],
+    ['https://staging.parallel.test/', 'https://staging.parallel.test'],
+    ['https://staging.parallel.test///', 'https://staging.parallel.test'],
+    ['  https://staging.parallel.test  ', 'https://staging.parallel.test'],
+    ['http://127.0.0.1:8787', 'http://127.0.0.1:8787'],
+  ])('resolves %j to %j', (baseUrl, expected) => {
+    expect(resolveParallelResponsesUrl(baseUrl)).toBe(
+      `${expected}/v1/responses`
+    );
+  });
+
+  it('falls back to the default when the variable is empty or whitespace', () => {
+    expect(resolveParallelResponsesUrl('')).toBe(PARALLEL_RESPONSES_URL);
+    expect(resolveParallelResponsesUrl('   ')).toBe(PARALLEL_RESPONSES_URL);
+  });
+
+  it('sends web_research to the overridden origin', async () => {
+    process.env.PARALLEL_BASE_URL = 'https://staging.parallel.test';
+    const fetchMock = mockResponse();
+
+    await runParallelResearch(apiKey, { query });
+
+    expect(fetchMock.mock.calls[0][0]).toBe(
+      'https://staging.parallel.test/v1/responses'
+    );
+  });
 });
 
 describe('Parallel research request', () => {

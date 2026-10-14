@@ -196,6 +196,24 @@ pi --no-extensions --no-skills -e ./src/index.ts
 
 This changes the browser login endpoints used by `/login parallel`.
 
+### Override The API Base URL
+
+`PARALLEL_BASE_URL` redirects every Parallel API call the tools make — search,
+extract and research all follow it, so they can be pointed at a staging or local
+host together:
+
+```bash
+export PARALLEL_BASE_URL=https://your-api-host
+pi --no-extensions --no-skills -e ./src/index.ts
+```
+
+The value is an **origin**, not a full URL: the `/v1/search`, `/v1/extract` and
+`/v1/responses` paths are appended to it, and a trailing slash is tolerated.
+Unset it to use `https://api.parallel.ai`.
+
+This is separate from `PARALLEL_PLATFORM_URL`, which only affects the OAuth
+login flow (that host is `platform.parallel.ai`, not `api.parallel.ai`).
+
 ## Quick Smoke Test
 
 Once Pi is running with the extension loaded, ask something that should force web usage, for example:
