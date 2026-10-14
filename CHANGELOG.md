@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-15
+
+### Changed
+
+- The prompt text the three web tools contribute is now about a quarter of its
+  previous size: 3,057 characters to 756, plus the routing block the extension
+  appends to the system prompt, 727 to 435. Pi reads four surfaces per tool —
+  the description and parameter descriptions in the tool schema, `promptSnippet`
+  in its `<tools>` section, `promptGuidelines` in `<rules>` — and this extension
+  adds a fifth, so the same instruction was reaching the model two to four
+  times. Each surface now owns one dimension: the routing block says when to
+  reach for a tool, the description what the tool does and what it costs, the
+  snippet the shape of what comes back, and each parameter its own constraint.
+- `web_search`, `web_fetch` and `web_research` no longer name Parallel in
+  anything the model reads, so the model reports web search, web fetch and web
+  research rather than naming the backend. The `parallel-login` command and its
+  status messages still name the provider, because `/login parallel` and
+  `PARALLEL_API_KEY` are literals you type.
+- `web_research` now describes what the tool does — multi-step web searches,
+  live page fetches, source cross-checks — and how long it takes, about 5–60
+  seconds. Neither fact appeared anywhere the model could read before, and the
+  previous description spent its whole length on what the tool returns, which
+  its snippet already said.
+
 ## [1.1.1] - 2026-10-14
 
 ### Fixed
@@ -71,11 +95,12 @@ A holding version containing only `package.json` and `README.md`, with no `pi`
 entry and no extension source, so it registers no tools. It was replaced by
 1.0.0 about a minute later.
 
-<!-- The Unreleased and 1.1.1 links compare against the v1.1.1 tag, which is
-     created when 1.1.1 ships. v0.0.0-stage has no tag, so its link does not
+<!-- The Unreleased and 1.1.2 links compare against the v1.1.2 tag, which is
+     created when 1.1.2 ships. v0.0.0-stage has no tag, so its link does not
      resolve. -->
 
-[Unreleased]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.1.1...HEAD
+[Unreleased]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.1.2...HEAD
+[1.1.2]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/normful/parallel-web-pi-extension-fork/releases/tag/v1.0.0
