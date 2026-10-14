@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-14
+
+### Fixed
+
+- `typebox` moved from `dependencies` to `peerDependencies` with a `"*"` range.
+  Pi supplies `typebox` to extensions from its own module graph, so the declared
+  dependency made npm install a second physical copy of the package under the
+  extension. Pi reports that as a startup warning ("Host-provided extension
+  packages must be declared in peerDependencies"), and beyond the warning the
+  duplicate copy could let the extension build tool schemas with one typebox
+  instance while Pi validates them with another. `typebox` stays in
+  `devDependencies` so local typechecking still resolves it.
+
 ## [1.1.0] - 2026-10-14
 
 ### Added
@@ -58,11 +71,12 @@ A holding version containing only `package.json` and `README.md`, with no `pi`
 entry and no extension source, so it registers no tools. It was replaced by
 1.0.0 about a minute later.
 
-<!-- The Unreleased and 1.1.0 links compare against the v1.1.0 tag, which is
-     created when 1.1.0 ships. v0.0.0-stage has no tag, so its link does not
+<!-- The Unreleased and 1.1.1 links compare against the v1.1.1 tag, which is
+     created when 1.1.1 ships. v0.0.0-stage has no tag, so its link does not
      resolve. -->
 
-[Unreleased]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/normful/parallel-web-pi-extension-fork/releases/tag/v1.0.0
 [0.0.0-stage]: https://github.com/normful/parallel-web-pi-extension-fork/releases/tag/v0.0.0-stage
