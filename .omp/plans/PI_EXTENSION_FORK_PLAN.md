@@ -246,3 +246,9 @@ Node v26.7.0, npm 10.9.8, source commit `3a4296260ef785055e16915ac7b76de744da025
   inlined header literal is `npm:@normful/parallel-web-pi-extension/v1.0.0`.
 - Deviations actually taken: step 1 pins the commit SHA; README renamed with npm
   commands and repo-root paths; no vitest bump was needed (1.6.1 runs on Node 26).
+- Live load, beyond this plan's checks: `pi 1.1.0 --no-extensions --no-skills -e
+  ./dist/index.js -p …` exits 0, and the model sees `web_search`, `web_fetch` and
+  `web_research`. This is the only evidence that the real Pi binary accepts the build;
+  the plan's checks all stop at `import('./dist/index.js')`.
+- Added after the plan was written: `prepare` and `prepublishOnly` both run
+  `npm run build`, so a publish cannot ship a `files` list whose `dist/` is absent.
