@@ -2,7 +2,7 @@
   "name": "@normful/parallel-web-pi-extension",
   "version": "1.0.0",
   "description": "Add Parallel web search, fetch, and research tools to your pi agent",
-  "author": "Parallel Web",
+  "author": "Norman Sue",
   "license": "MIT",
   "type": "module",
   "pi": {
