@@ -40,8 +40,14 @@ Requires `@earendil-works/pi-coding-agent` 0.99.0 or newer.
 
 ## Web Research
 
-After installing this extension, run `/login parallel` and ask your usual Pi
-agent a research question. No additional package or model selection is needed:
+`web_search` and `web_fetch` are declared to the model when the extension loads.
+`web_research` is registered as a `deferred` tool, so the model does not see it
+until something selects it: enable it for every session with a `defaultTools`
+entry, add it for one run with `--tools web_research`, or let `tool_search` or a
+`codemode` script reach it.
+
+After enabling it, run `/login parallel` and ask your usual Pi agent a research
+question:
 
 ```text
 Compare the current Node.js compatibility of Node and Bun for a production API server. Research the tradeoffs and cite primary sources.

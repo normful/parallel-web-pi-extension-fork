@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Breaking Changes
+
+- `web_research` is registered with `exposure: "deferred"`, so Pi no longer
+  declares it to the model. Nothing selects it for a default install: the model
+  reaches it only when it is named (`--tools web_research`, or a `defaultTools`
+  entry), when `tool_search` is active and finds it, or from a codemode script.
+  `web_search` and `web_fetch` stay `direct` and keep working as before. The
+  routing guidance for research also disappears from the system prompt while the
+  tool is inactive, because Pi only lists active tools.
+- The peer dependency is now `@earendil-works/pi-coding-agent >= 0.99.0`, the
+  release that added `annotations`, `outputSchema`, and `structuredContent`, and
+  `@earendil-works/pi-tui >= 0.99.0`, which the tool renderers import. Pi
+  supplies both from its own module graph, as it already does for `typebox`.
+
 ### Added
 
 - The three web tools declare `annotations` (`readOnlyHint`, `openWorldHint`), so
@@ -20,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - A structured result is stored on the tool result message, so a session file
   grows with the payload size: a 400KB `web_fetch` stores the full payload next
   to its 50KB preview. Tool output sent to the model is unchanged.
+- Interactive tool rows: a call line for each tool (the question and effort, the
+  objective and query count, the URLs or their host) and a one-line summary once
+  it finishes (`medium · 38.2s · 11.4KB`, `12 results · 8.1KB`,
+  `18 of 20 URLs · 2 failed`), with the full text shown when the row is
+  expanded. Renderers affect only the interactive transcript and HTML exports;
+  Pi falls back to its own layout if one throws.
 
 ### Changed
 
@@ -28,6 +48,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   write `extract.json` and `search.json` the way `web_research` already wrote
   `research.md`. `details` gains `truncated`, `totalLines`, `totalBytes`, and
   `outputFile` when that happens, and nothing extra when it does not.
+- `details` also records what the renderers summarize: `results` for a search,
+  and `results`, `errors`, and `warnings` for a fetch.
 - Truncation notices name the limit that applied and are counted inside the
   2,000-line and 50KB budget instead of on top of it, so a preview never exceeds
   what Pi sends.
@@ -38,8 +60,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `web_fetch` enforces its documented URL range (`1..20` in the schema) and
   `web_search` requires at least one query. The query description no longer says
   "2-3" and "at least one" in the same sentence.
-- The peer dependency is now `@earendil-works/pi-coding-agent >= 0.99.0`, the
-  release that added `annotations`, `outputSchema`, and `structuredContent`.
 
 ### Fixed
 

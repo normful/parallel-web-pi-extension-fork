@@ -507,6 +507,9 @@ describe('@normful/parallel-web-pi-extension', () => {
       provider: 'parallel',
       product: 'extract',
       urls: ['https://parallel.ai/docs', 'https://parallel.ai/blog'],
+      results: 0,
+      errors: 0,
+      warnings: 0,
     });
   });
 
@@ -1071,6 +1074,84 @@ describe('@normful/parallel-web-pi-extension', () => {
       }
     }
   );
+
+  it('keeps search and fetch direct while research is deferred', async () => {
+    const extension = (await import('../index.js')).default;
+    const pi = createMockPi();
+    extension(pi as unknown as ExtensionAPI);
+
+    // Deferred: callable from a script and reachable by name, never declared.
+    expect(getRegisteredTool(pi, 'web_research').exposure).toBe('deferred');
+    // Absent exposure means "direct", which declares the tool while active.
+    expect(getRegisteredTool(pi, 'web_search').exposure).toBeUndefined();
+    expect(getRegisteredTool(pi, 'web_fetch').exposure).toBeUndefined();
+  });
+
+  it('registers a renderer pair for every web tool', async () => {
+    const extension = (await import('../index.js')).default;
+    const pi = createMockPi();
+    extension(pi as unknown as ExtensionAPI);
+
+    for (const name of ['web_research', 'web_search', 'web_fetch']) {
+      expect(typeof getRegisteredTool(pi, name).renderCall).toBe('function');
+      expect(typeof getRegisteredTool(pi, name).renderResult).toBe('function');
+    }
+  });
+
+  it('records payload counts in details for the renderers', async () => {
+    mocks.getParallelApiKey.mockResolvedValue('stored-api-key');
+    mocks.runParallelSearch.mockResolvedValue({
+      results: [{ title: 'a' }, { title: 'b' }],
+      warnings: [{ message: 'partial index' }],
+    });
+    mocks.runParallelExtract.mockResolvedValue({
+      results: [{ url: 'https://a.test' }],
+      errors: [{ url: 'https://b.test', error_type: 'not_found' }],
+      warnings: null,
+    });
+    const extension = (await import('../index.js')).default;
+    const pi = createMockPi();
+    extension(pi as unknown as ExtensionAPI);
+
+    const search = await getRegisteredTool(pi, 'web_search').execute(
+      'search-counts',
+      { objective: 'Find docs', search_queries: ['docs'] },
+      undefined,
+      undefined,
+      createToolContext()
+    );
+    expect(search.details).toMatchObject({ results: 2, warnings: 1 });
+
+    const fetch = await getRegisteredTool(pi, 'web_fetch').execute(
+      'fetch-counts',
+      { urls: ['https://a.test', 'https://b.test'] },
+      undefined,
+      undefined,
+      createToolContext()
+    );
+    expect(fetch.details).toMatchObject({ results: 1, errors: 1, warnings: 0 });
+  });
+
+  it('survives a payload without the optional arrays', async () => {
+    mocks.getParallelApiKey.mockResolvedValue('stored-api-key');
+    mocks.runParallelExtract.mockResolvedValue({});
+    const extension = (await import('../index.js')).default;
+    const pi = createMockPi();
+    extension(pi as unknown as ExtensionAPI);
+
+    const result = await getRegisteredTool(pi, 'web_fetch').execute(
+      'fetch-sparse',
+      { urls: ['https://a.test'] },
+      undefined,
+      undefined,
+      createToolContext()
+    );
+    expect(result.details).toMatchObject({
+      results: 0,
+      errors: 0,
+      warnings: 0,
+    });
+  });
 
   it('names the byte limit when bytes, not lines, cut the preview', async () => {
     mocks.getParallelApiKey.mockResolvedValue('stored-api-key');

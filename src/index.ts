@@ -23,6 +23,14 @@ import {
   runParallelSearch,
 } from './parallel-client';
 import { truncateOutput, type TruncationDetails } from './truncate';
+import {
+  renderFetchCall,
+  renderFetchResult,
+  renderResearchCall,
+  renderResearchResult,
+  renderSearchCall,
+  renderSearchResult,
+} from './render';
 
 /**
  * Result of a web tool that costs money and reaches the open web, which
@@ -247,6 +255,12 @@ export default function (pi: ExtensionAPI) {
       ),
     }),
     annotations: WEB_TOOL_ANNOTATIONS,
+    // Not declared to the model: reachable by name (`--tools web_research`), or
+    // through `tool_search` or a script. Research is the one tool here that costs
+    // a long round trip, so it is opt-in rather than always in the prompt.
+    exposure: 'deferred',
+    renderCall: renderResearchCall,
+    renderResult: renderResearchResult,
     // Reject invalid raw values before Pi coerces them to schema types.
     prepareArguments: parseResearchInput,
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
@@ -314,6 +328,8 @@ export default function (pi: ExtensionAPI) {
     }),
     outputSchema: PAYLOAD_OUTPUT_SCHEMA,
     annotations: WEB_TOOL_ANNOTATIONS,
+    renderCall: renderSearchCall,
+    renderResult: renderSearchResult,
     // Reject invalid raw values before Pi coerces them to schema types.
     prepareArguments: parseSearchInput,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -339,6 +355,8 @@ export default function (pi: ExtensionAPI) {
         details: {
           provider: 'parallel',
           product: 'search',
+          results: result.results?.length ?? 0,
+          warnings: result.warnings?.length ?? 0,
           ...truncationDetails(preview),
         },
         structuredContent: asJsonValue(result),
@@ -375,6 +393,8 @@ export default function (pi: ExtensionAPI) {
     }),
     outputSchema: PAYLOAD_OUTPUT_SCHEMA,
     annotations: WEB_TOOL_ANNOTATIONS,
+    renderCall: renderFetchCall,
+    renderResult: renderFetchResult,
     // Reject invalid raw values before Pi coerces them to schema types.
     prepareArguments: parseExtractInput,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
@@ -402,6 +422,9 @@ export default function (pi: ExtensionAPI) {
           provider: 'parallel',
           product: 'extract',
           urls: params.urls,
+          results: result.results?.length ?? 0,
+          errors: result.errors?.length ?? 0,
+          warnings: result.warnings?.length ?? 0,
           ...truncationDetails(preview),
         },
         structuredContent: asJsonValue(result),
