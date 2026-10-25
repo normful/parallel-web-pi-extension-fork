@@ -5,6 +5,7 @@ import { validateToolArguments } from '@earendil-works/pi-ai';
 import {
   DEFAULT_MAX_BYTES,
   DEFAULT_MAX_LINES,
+  formatSize,
 } from '@earendil-works/pi-coding-agent';
 import type {
   ExtensionAPI,
@@ -27,7 +28,8 @@ vi.mock('../parallel-auth.js', () => ({
   registerParallelAuthProvider: mocks.registerParallelAuthProvider,
 }));
 
-vi.mock('../parallel-client.js', () => ({
+vi.mock('../parallel-client.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../parallel-client.js')>()),
   runParallelSearch: mocks.runParallelSearch,
   runParallelExtract: mocks.runParallelExtract,
   isParallelAuthenticationError: mocks.isParallelAuthenticationError,
@@ -133,7 +135,6 @@ describe('@normful/parallel-web-pi-extension', () => {
         label: 'Web Search',
         description: expect.stringContaining('Search the web for current'),
         promptSnippet: 'Sources and excerpts',
-        promptGuidelines: [],
         execute: expect.any(Function),
       })
     );
@@ -528,7 +529,7 @@ describe('@normful/parallel-web-pi-extension', () => {
       createToolContext()
     );
 
-    expect(result.content[0].text).toContain('[Output truncated: showing');
+    expect(result.content[0].text).toContain('[Output truncated at the');
   });
 
   it('should forward the active model id as client_model', async () => {
@@ -733,6 +734,10 @@ describe('@normful/parallel-web-pi-extension', () => {
         { type: 'text', text: 'Answer with [source](https://example.com)' },
       ],
       details: { provider: 'parallel', product: 'responses', effort: 'low' },
+      structuredContent: {
+        text: 'Answer with [source](https://example.com)',
+        effort: 'low',
+      },
     });
     expect(onUpdate).toHaveBeenCalled();
     expect(result.details.outputFile).toBeUndefined();
@@ -876,5 +881,227 @@ describe('@normful/parallel-web-pi-extension', () => {
       )
     ).rejects.toThrow('/login parallel');
     expect(mocks.runParallelResearch).not.toHaveBeenCalled();
+  });
+
+  it('annotates every web tool as read-only and open-world', async () => {
+    const extension = (await import('../index.js')).default;
+    const pi = createMockPi();
+    extension(pi as unknown as ExtensionAPI);
+
+    for (const name of ['web_research', 'web_search', 'web_fetch']) {
+      expect(getRegisteredTool(pi, name).annotations).toEqual({
+        readOnlyHint: true,
+        openWorldHint: true,
+      });
+    }
+  });
+
+  it('declares an output schema so scripts receive the payload, not JSON text', async () => {
+    mocks.getParallelApiKey.mockResolvedValue('stored-api-key');
+    const searchPayload = {
+      results: [{ title: 'Example', url: 'https://a.test' }],
+    };
+    const extractPayload = {
+      results: [{ url: 'https://a.test', excerpts: ['text'] }],
+    };
+    mocks.runParallelSearch.mockResolvedValue(searchPayload);
+    mocks.runParallelExtract.mockResolvedValue(extractPayload);
+    const extension = (await import('../index.js')).default;
+    const pi = createMockPi();
+    extension(pi as unknown as ExtensionAPI);
+
+    const searchTool = getRegisteredTool(pi, 'web_search');
+    const searchResult = await searchTool.execute(
+      'search-structured',
+      { objective: 'Find docs', search_queries: ['docs'] },
+      undefined,
+      undefined,
+      createToolContext()
+    );
+    expect(searchTool.outputSchema).toBeDefined();
+    expect(searchResult.structuredContent).toEqual(searchPayload);
+    // The model still receives text, so the two paths stay independent.
+    expect(typeof searchResult.content[0].text).toBe('string');
+
+    const fetchTool = getRegisteredTool(pi, 'web_fetch');
+    const fetchResult = await fetchTool.execute(
+      'fetch-structured',
+      { urls: ['https://a.test'] },
+      undefined,
+      undefined,
+      createToolContext()
+    );
+    expect(fetchTool.outputSchema).toBeDefined();
+    expect(fetchResult.structuredContent).toEqual(extractPayload);
+
+    mocks.runParallelResearch.mockResolvedValue({
+      text: 'An answer',
+      effort: 'medium',
+      responseId: 'resp_next',
+    });
+    const researchResult = await getRegisteredTool(pi, 'web_research').execute(
+      'research-structured',
+      { query: 'A question' },
+      undefined,
+      undefined,
+      createToolContext()
+    );
+    expect(researchResult.structuredContent).toEqual({
+      text: 'An answer',
+      effort: 'medium',
+      responseId: 'resp_next',
+    });
+  });
+
+  it('enforces the documented argument limits in the schema', async () => {
+    const extension = (await import('../index.js')).default;
+    const pi = createMockPi();
+    extension(pi as unknown as ExtensionAPI);
+
+    expect(
+      getRegisteredTool(pi, 'web_search').parameters.properties.search_queries
+    ).toMatchObject({ minItems: 1 });
+    expect(
+      getRegisteredTool(pi, 'web_fetch').parameters.properties.urls
+    ).toMatchObject({ minItems: 1, maxItems: 20 });
+  });
+
+  it.each([null, 0, false, {}, [], '', ' '])(
+    'web_search rejects raw invalid arguments before Pi coercion: %j',
+    async (value) => {
+      const extension = (await import('../index.js')).default;
+      const pi = createMockPi();
+      extension(pi as unknown as ExtensionAPI);
+      const tool = getRegisteredTool(pi, 'web_search');
+
+      expect(() =>
+        tool.prepareArguments({ objective: value, search_queries: ['q'] })
+      ).toThrow('non-empty objective');
+      expect(() =>
+        tool.prepareArguments({ objective: 'goal', search_queries: value })
+      ).toThrow('non-empty list of search queries');
+      expect(mocks.runParallelSearch).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([
+    [[], 'non-empty list of HTTP/HTTPS URLs'],
+    [Array.from({ length: 21 }, (_, i) => `https://a.test/${i}`), 'at most 20'],
+    [['example.com'], 'not an absolute URL'],
+    [['ftp://a.test/file'], 'only HTTP and HTTPS'],
+    [[null], 'HTTP/HTTPS URLs'],
+  ])('web_fetch rejects raw invalid urls: %j', async (urls, message) => {
+    const extension = (await import('../index.js')).default;
+    const pi = createMockPi();
+    extension(pi as unknown as ExtensionAPI);
+    const tool = getRegisteredTool(pi, 'web_fetch');
+
+    expect(() => tool.prepareArguments({ urls })).toThrow(message);
+    expect(mocks.runParallelExtract).not.toHaveBeenCalled();
+  });
+
+  it('web_search and web_fetch drop fields the tools do not send', async () => {
+    const extension = (await import('../index.js')).default;
+    const pi = createMockPi();
+    extension(pi as unknown as ExtensionAPI);
+
+    expect(
+      getRegisteredTool(pi, 'web_search').prepareArguments({
+        objective: 'Goal',
+        search_queries: ['q'],
+        history: 'private',
+      })
+    ).toEqual({ objective: 'Goal', search_queries: ['q'] });
+    expect(
+      getRegisteredTool(pi, 'web_fetch').prepareArguments({
+        urls: ['https://a.test'],
+        instructions: 'private',
+      })
+    ).toEqual({ urls: ['https://a.test'] });
+  });
+
+  it.each(['web_search', 'web_fetch'])(
+    '%s keeps the complete payload on disk when the preview is cut',
+    async (name) => {
+      mocks.getParallelApiKey.mockResolvedValue('stored-api-key');
+      const payload = {
+        results: Array.from({ length: 5000 }, (_, index) => `result-${index}`),
+      };
+      mocks.runParallelSearch.mockResolvedValue(payload);
+      mocks.runParallelExtract.mockResolvedValue(payload);
+      const extension = (await import('../index.js')).default;
+      const pi = createMockPi();
+      extension(pi as unknown as ExtensionAPI);
+      const tool = getRegisteredTool(pi, name);
+
+      const result = await tool.execute(
+        'truncated-payload',
+        name === 'web_fetch'
+          ? { urls: ['https://a.test'] }
+          : { objective: 'Find many results', search_queries: ['many'] },
+        undefined,
+        undefined,
+        createToolContext()
+      );
+
+      const outputFile = result.details.outputFile;
+      try {
+        expect(result.details.truncated).toBe(true);
+        expect(result.details.totalLines).toBeGreaterThan(DEFAULT_MAX_LINES);
+        expect(result.content[0].text).toContain(
+          `at the ${DEFAULT_MAX_LINES}-line limit (`
+        );
+        expect(result.content[0].text).toContain(`Full JSON: ${outputFile}`);
+        expect(result.content[0].text).toContain('[Output truncated at the');
+        expect(Buffer.byteLength(result.content[0].text)).toBeLessThanOrEqual(
+          DEFAULT_MAX_BYTES
+        );
+        expect(result.content[0].text.split('\n').length).toBeLessThanOrEqual(
+          DEFAULT_MAX_LINES
+        );
+        // Scripts get the whole payload even when the model only sees a head.
+        expect(result.structuredContent).toEqual(payload);
+        expect(await readFile(outputFile, 'utf8')).toBe(
+          JSON.stringify(payload, null, 2)
+        );
+        expect((await stat(outputFile)).mode & 0o077).toBe(0);
+      } finally {
+        if (outputFile)
+          await rm(dirname(outputFile), { recursive: true, force: true });
+      }
+    }
+  );
+
+  it('names the byte limit when bytes, not lines, cut the preview', async () => {
+    mocks.getParallelApiKey.mockResolvedValue('stored-api-key');
+    const payload = { results: ['界'.repeat(DEFAULT_MAX_BYTES)] };
+    mocks.runParallelExtract.mockResolvedValue(payload);
+    const extension = (await import('../index.js')).default;
+    const pi = createMockPi();
+    extension(pi as unknown as ExtensionAPI);
+
+    const result = await getRegisteredTool(pi, 'web_fetch').execute(
+      'truncated-bytes',
+      { urls: ['https://a.test'] },
+      undefined,
+      undefined,
+      createToolContext()
+    );
+
+    const outputFile = result.details.outputFile;
+    try {
+      expect(result.content[0].text).toContain(
+        `at the ${formatSize(DEFAULT_MAX_BYTES)} limit (`
+      );
+      expect(Buffer.byteLength(result.content[0].text)).toBeLessThanOrEqual(
+        DEFAULT_MAX_BYTES
+      );
+      expect(await readFile(outputFile, 'utf8')).toBe(
+        JSON.stringify(payload, null, 2)
+      );
+    } finally {
+      if (outputFile)
+        await rm(dirname(outputFile), { recursive: true, force: true });
+    }
   });
 });

@@ -1,17 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from '@earendil-works/pi-coding-agent';
-import {
-  DEFAULT_MAX_BYTES,
-  DEFAULT_MAX_LINES,
-  formatSize,
-  truncateHead,
-} from '@earendil-works/pi-coding-agent';
+import type { JsonValue } from '@earendil-works/pi-ai';
 import { Type } from 'typebox';
 import {
   MAX_RESPONSE_ID_LENGTH,
@@ -25,23 +17,40 @@ import {
 } from './parallel-auth';
 import {
   isParallelAuthenticationError,
+  parseExtractInput,
+  parseSearchInput,
   runParallelExtract,
   runParallelSearch,
 } from './parallel-client';
+import { truncateOutput, type TruncationDetails } from './truncate';
 
-function truncateJson(value: unknown) {
-  const pretty = JSON.stringify(value, null, 2);
-  const truncation = truncateHead(pretty, {
-    maxLines: DEFAULT_MAX_LINES,
-    maxBytes: DEFAULT_MAX_BYTES,
-  });
+/**
+ * Result of a web tool that costs money and reaches the open web, which
+ * permission extensions read to decide what to confirm.
+ */
+const WEB_TOOL_ANNOTATIONS = {
+  readOnlyHint: true,
+  openWorldHint: true,
+} as const;
 
-  let text = truncation.content;
-  if (truncation.truncated) {
-    text += `\n\n[Output truncated: showing ${truncation.outputLines} of ${truncation.totalLines} lines (${formatSize(truncation.outputBytes)} of ${formatSize(truncation.totalBytes)})]`;
-  }
-  return text;
+/**
+ * The search and fetch payloads come from the SDK's own response types, which
+ * this extension does not pin beyond the SDK version. Declaring the object lets
+ * codemode scripts receive the parsed payload instead of truncated JSON text
+ * without freezing a shape the API may extend.
+ */
+const PAYLOAD_OUTPUT_SCHEMA = Type.Object({}, { additionalProperties: true });
+
+/** SDK response interfaces have no index signature, so they need a cast. */
+function asJsonValue(value: unknown): JsonValue {
+  return value as JsonValue;
 }
+
+const EFFORT_SCHEMA = Type.Union([
+  Type.Literal('low'),
+  Type.Literal('medium'),
+  Type.Literal('high'),
+]);
 
 const SUPPRESSED_SKILL_NAMES = new Set([
   'parallel-cli-setup',
@@ -79,6 +88,34 @@ const WEB_TOOL_GUIDANCE = {
   web_fetch:
     'Use web_fetch to read a specific page in full or check a claim at its source.',
 };
+
+/** Result details shared by the three tools, plus each tool's own fields. */
+function truncationDetails(output: TruncationDetails): TruncationDetails {
+  return output.truncated
+    ? {
+        truncated: true,
+        totalLines: output.totalLines,
+        totalBytes: output.totalBytes,
+        outputFile: output.outputFile,
+      }
+    : {};
+}
+
+/**
+ * Serialize a payload for the model, keeping the whole thing on disk when it
+ * does not fit. Scripts read the payload itself through `structuredContent`.
+ */
+async function jsonPreview(
+  value: unknown,
+  options: { directoryPrefix: string; fileName: string }
+) {
+  return await truncateOutput(JSON.stringify(value, null, 2), {
+    directoryPrefix: options.directoryPrefix,
+    fileName: options.fileName,
+    notice: (path, summary) =>
+      `[Output truncated ${summary}. Full JSON: ${path}]`,
+  });
+}
 
 export default function (pi: ExtensionAPI) {
   const parallelSessionId = randomUUID();
@@ -172,7 +209,6 @@ export default function (pi: ExtensionAPI) {
     description:
       'Runs multi-step web searches, page fetches, and source cross-checks. ~5–60s.',
     promptSnippet: 'Cited answers',
-    promptGuidelines: [],
     parameters: Type.Object({
       query: Type.String({
         minLength: 1,
@@ -196,6 +232,21 @@ export default function (pi: ExtensionAPI) {
         })
       ),
     }),
+    outputSchema: Type.Object({
+      text: Type.String({
+        description: 'Answer with citations, before truncation.',
+      }),
+      effort: EFFORT_SCHEMA,
+      responseId: Type.Optional(
+        Type.String({ description: 'Research context for a follow-up call.' })
+      ),
+      outputFile: Type.Optional(
+        Type.String({
+          description: 'File with the complete answer and sources.',
+        })
+      ),
+    }),
+    annotations: WEB_TOOL_ANNOTATIONS,
     // Reject invalid raw values before Pi coerces them to schema types.
     prepareArguments: parseResearchInput,
     async execute(_toolCallId, params, signal, onUpdate, ctx) {
@@ -216,33 +267,28 @@ export default function (pi: ExtensionAPI) {
       const report = result.responseId
         ? `Response ID: ${result.responseId}\n\n${result.text}`
         : result.text;
-      const preview = truncateHead(report, {
-        maxLines: DEFAULT_MAX_LINES,
-        maxBytes: DEFAULT_MAX_BYTES,
+      // Keep the complete answer and citations available when Pi's context
+      // limit requires a preview. Normal research results create no file.
+      const preview = await truncateOutput(report, {
+        directoryPrefix: 'parallel-research-',
+        fileName: 'research.md',
+        notice: (path, summary) =>
+          `[Research output truncated ${summary}. Full answer and sources: ${path}]`,
       });
-      let text = preview.content;
-      let outputFile: string | undefined;
-      if (preview.truncated) {
-        // Keep the complete answer and citations available when Pi's context
-        // limit requires a preview. Normal research results create no file.
-        const directory = await mkdtemp(join(tmpdir(), 'parallel-research-'));
-        outputFile = join(directory, 'research.md');
-        await writeFile(outputFile, report, { mode: 0o600 });
-        const notice = `\n\n[Research output truncated. Full answer and sources: ${outputFile}]`;
-        text =
-          truncateHead(report, {
-            maxLines: DEFAULT_MAX_LINES - 2,
-            maxBytes: DEFAULT_MAX_BYTES - Buffer.byteLength(notice),
-          }).content + notice;
-      }
       return {
-        content: [{ type: 'text', text }],
+        content: [{ type: 'text', text: preview.text }],
         details: {
           provider: 'parallel',
           product: 'responses',
           effort: result.effort,
           ...(result.responseId ? { responseId: result.responseId } : {}),
-          ...(outputFile ? { outputFile } : {}),
+          ...truncationDetails(preview),
+        },
+        structuredContent: {
+          text: result.text,
+          effort: result.effort,
+          ...(result.responseId ? { responseId: result.responseId } : {}),
+          ...(preview.outputFile ? { outputFile: preview.outputFile } : {}),
         },
       };
     },
@@ -254,7 +300,6 @@ export default function (pi: ExtensionAPI) {
     description:
       'Search the web for current results; prefer it over generic browser search tools.',
     promptSnippet: 'Sources and excerpts',
-    promptGuidelines: [],
     parameters: Type.Object({
       objective: Type.String({
         description: 'The goal driving the search.',
@@ -263,9 +308,14 @@ export default function (pi: ExtensionAPI) {
         Type.String({
           description:
             '2-3 short keyword queries (3-6 words each); at least one.',
-        })
+        }),
+        { minItems: 1 }
       ),
     }),
+    outputSchema: PAYLOAD_OUTPUT_SCHEMA,
+    annotations: WEB_TOOL_ANNOTATIONS,
+    // Reject invalid raw values before Pi coerces them to schema types.
+    prepareArguments: parseSearchInput,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const result = await runWithAuth(ctx, (apiKey) =>
         runParallelSearch(
@@ -279,13 +329,19 @@ export default function (pi: ExtensionAPI) {
           signal
         )
       );
+      const preview = await jsonPreview(result, {
+        directoryPrefix: 'parallel-search-',
+        fileName: 'search.json',
+      });
 
       return {
-        content: [{ type: 'text', text: truncateJson(result) }],
+        content: [{ type: 'text', text: preview.text }],
         details: {
           provider: 'parallel',
           product: 'search',
+          ...truncationDetails(preview),
         },
+        structuredContent: asJsonValue(result),
       };
     },
   });
@@ -300,7 +356,8 @@ export default function (pi: ExtensionAPI) {
       urls: Type.Array(
         Type.String({
           description: 'HTTP/HTTPS URLs, up to 20 per call.',
-        })
+        }),
+        { minItems: 1, maxItems: 20 }
       ),
       objective: Type.Optional(
         Type.String({
@@ -311,10 +368,15 @@ export default function (pi: ExtensionAPI) {
         Type.Array(
           Type.String({
             description: 'Optional; used with objective to focus excerpts.',
-          })
+          }),
+          { minItems: 1 }
         )
       ),
     }),
+    outputSchema: PAYLOAD_OUTPUT_SCHEMA,
+    annotations: WEB_TOOL_ANNOTATIONS,
+    // Reject invalid raw values before Pi coerces them to schema types.
+    prepareArguments: parseExtractInput,
     async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const result = await runWithAuth(ctx, (apiKey) =>
         runParallelExtract(
@@ -329,14 +391,20 @@ export default function (pi: ExtensionAPI) {
           signal
         )
       );
+      const preview = await jsonPreview(result, {
+        directoryPrefix: 'parallel-extract-',
+        fileName: 'extract.json',
+      });
 
       return {
-        content: [{ type: 'text', text: truncateJson(result) }],
+        content: [{ type: 'text', text: preview.text }],
         details: {
           provider: 'parallel',
           product: 'extract',
           urls: params.urls,
+          ...truncationDetails(preview),
         },
+        structuredContent: asJsonValue(result),
       };
     },
   });

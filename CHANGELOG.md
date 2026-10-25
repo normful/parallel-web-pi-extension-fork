@@ -7,6 +7,43 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- The three web tools declare `annotations` (`readOnlyHint`, `openWorldHint`), so
+  a permission extension can tell a read-only web lookup from a call that may
+  change something.
+- `web_search`, `web_fetch`, and `web_research` declare an `outputSchema` and
+  return `structuredContent`. Codemode scripts now receive the parsed payload
+  instead of JSON text cut at 2,000 lines or 50KB, and `web_research`'s
+  structured result carries the complete answer plus its `responseId`. The model
+  still receives text, truncated as before.
+
+### Changed
+
+- A result that exceeds Pi's context limits now keeps its complete output in a
+  private temp file and names it in the preview: `web_fetch` and `web_search`
+  write `extract.json` and `search.json` the way `web_research` already wrote
+  `research.md`. `details` gains `truncated`, `totalLines`, `totalBytes`, and
+  `outputFile` when that happens, and nothing extra when it does not.
+- Truncation notices name the limit that applied and are counted inside the
+  2,000-line and 50KB budget instead of on top of it, so a preview never exceeds
+  what Pi sends.
+- `web_search` and `web_fetch` validate raw arguments before Pi coerces them to
+  schema types, as `web_research` already did. A `null` or `0` objective used to
+  reach the API as the word "null" or "0"; a fetch now rejects non-HTTP(S) URLs,
+  an empty URL list, and more than 20 URLs per call.
+- `web_fetch` enforces its documented URL range (`1..20` in the schema) and
+  `web_search` requires at least one query. The query description no longer says
+  "2-3" and "at least one" in the same sentence.
+- The peer dependency is now `@earendil-works/pi-coding-agent >= 0.99.0`, the
+  release that added `annotations`, `outputSchema`, and `structuredContent`.
+
+### Fixed
+
+- A truncated `web_search` or `web_fetch` result no longer discards the rest of
+  the payload, and a truncated result is now visible in `details` instead of
+  only in the text.
+
 ## [1.1.2] - 2026-10-15
 
 ### Changed

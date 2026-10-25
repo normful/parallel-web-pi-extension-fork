@@ -23,6 +23,9 @@ pi install npm:@normful/parallel-web-pi-extension
   Parallel browser OAuth flow and stores the API key in Pi's auth store
   (`auth.json`) alongside every other provider credential
 - Adds a `parallel-login` command that reports current auth status
+- Marked read-only and open-world for permission extensions, returns
+  `structuredContent` to `codemode` scripts, and keeps a result that exceeds Pi's
+  context limits in a private temp file instead of dropping the rest
 
 Auth resolution order (owned by Pi, not the extension):
 
@@ -33,7 +36,7 @@ Run `/parallel-login` inside Pi to check whether Parallel is configured. To
 remove a stored credential, run `/logout` and select Parallel. Environment
 variables are not affected by Pi's logout flow.
 
-Requires `@earendil-works/pi-coding-agent` 0.83.0 or newer.
+Requires `@earendil-works/pi-coding-agent` 0.99.0 or newer.
 
 ## Web Research
 
