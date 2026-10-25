@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-26
+
 ### Breaking Changes
 
 - `web_research` is registered with `exposure: "deferred"`, so Pi no longer
@@ -155,11 +157,11 @@ A holding version containing only `package.json` and `README.md`, with no `pi`
 entry and no extension source, so it registers no tools. It was replaced by
 1.0.0 about a minute later.
 
-<!-- The Unreleased and 1.1.2 links compare against the v1.1.2 tag, which is
-     created when 1.1.2 ships. v0.0.0-stage has no tag, so its link does not
-     resolve. -->
+<!-- The Unreleased link compares against the v2.0.0 tag, which is created when
+     2.0.0 ships. v0.0.0-stage has no tag, so its link does not resolve. -->
 
-[Unreleased]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.1.2...HEAD
+[Unreleased]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.1.2...v2.0.0
 [1.1.2]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.1.1...v1.1.2
 [1.1.1]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/normful/parallel-web-pi-extension-fork/compare/v1.0.0...v1.1.0
