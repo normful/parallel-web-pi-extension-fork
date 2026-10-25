@@ -17,6 +17,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   instead of JSON text cut at 2,000 lines or 50KB, and `web_research`'s
   structured result carries the complete answer plus its `responseId`. The model
   still receives text, truncated as before.
+- A structured result is stored on the tool result message, so a session file
+  grows with the payload size: a 400KB `web_fetch` stores the full payload next
+  to its 50KB preview. Tool output sent to the model is unchanged.
 
 ### Changed
 
